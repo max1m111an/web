@@ -18,6 +18,9 @@
     "addReactionLabel": "Добавить реакцию",
     "replyLabel": "Ответить"
   },
+  "file": {
+    "download": "Скачать {{fileName}}"
+  },
   "deliveryStatus": {
     "delivered": {
       "label": "Сообщение доставлено",

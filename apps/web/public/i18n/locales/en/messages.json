@@ -18,6 +18,9 @@
     "addReactionLabel": "Add Reaction",
     "replyLabel": "Reply"
   },
+  "file": {
+    "download": "Download {{fileName}}"
+  },
 
   "deliveryStatus": {
     "delivered": {
