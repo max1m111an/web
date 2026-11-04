@@ -19,7 +19,16 @@
     "replyLabel": "Ответить"
   },
   "file": {
-    "download": "Скачать {{fileName}}"
+    "download": "Скачать {{fileName}}",
+    "attach": "Прикрепить файл",
+    "dialog": {
+      "title": "Прикрепить файл",
+      "description": "Имя файла будет добавлено в сообщение.",
+      "dropHint": "Перетащите файл сюда",
+      "dropActive": "Отпустите файл, чтобы прикрепить",
+      "chooseHint": "или нажмите на эту область, чтобы выбрать файл",
+      "choose": "Выбрать файл"
+    }
   },
   "deliveryStatus": {
     "delivered": {

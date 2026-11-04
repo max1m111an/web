@@ -19,7 +19,16 @@
     "replyLabel": "Reply"
   },
   "file": {
-    "download": "Download {{fileName}}"
+    "download": "Download {{fileName}}",
+    "attach": "Attach file",
+    "dialog": {
+      "title": "Attach a file",
+      "description": "The file name will be added to the message.",
+      "dropHint": "Drag and drop a file here",
+      "dropActive": "Drop the file to attach it",
+      "chooseHint": "or click this area to choose a file",
+      "choose": "Choose file"
+    }
   },
 
   "deliveryStatus": {

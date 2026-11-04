@@ -1,5 +1,67 @@
 import { describe, expect, it } from "vitest";
-import { formatFileSize, parseFileMessage } from "./fileMessage.ts";
+import {
+  buildFileMessage,
+  formatFileSize,
+  parseFileMessage,
+  truncateToUtf8Bytes,
+} from "./fileMessage.ts";
+
+describe("truncateToUtf8Bytes", () => {
+  it("returns the value unchanged when it fits", () => {
+    expect(truncateToUtf8Bytes("notes.txt", 20)).toBe("notes.txt");
+  });
+
+  it("truncates ascii text by bytes", () => {
+    expect(truncateToUtf8Bytes("notes.txt", 5)).toBe("notes");
+  });
+
+  it("does not split multi-byte characters", () => {
+    expect(truncateToUtf8Bytes("привет", 5)).toBe("пр");
+  });
+
+  it("returns an empty string for non-positive limits", () => {
+    expect(truncateToUtf8Bytes("notes", 0)).toBe("");
+    expect(truncateToUtf8Bytes("notes", -1)).toBe("");
+  });
+});
+
+describe("buildFileMessage", () => {
+  it("builds a file message with the prefix", () => {
+    expect(buildFileMessage("notes.txt", 200)).toBe("file::notes.txt");
+  });
+
+  it("uses only the base name and removes line breaks", () => {
+    expect(buildFileMessage("C:\\docs\\report.pdf", 200)).toBe(
+      "file::report.pdf",
+    );
+    expect(buildFileMessage("re\nport.txt", 200)).toBe("file::re port.txt");
+  });
+
+  it("falls back to a default name for an empty value", () => {
+    expect(buildFileMessage("   ", 200)).toBe("file::file");
+  });
+
+  it("truncates the file name to fit the byte limit", () => {
+    const message = buildFileMessage("a-very-long-file-name.txt", 10);
+
+    expect(message).toBe("file::a-ve");
+    expect(new TextEncoder().encode(message).byteLength).toBe(10);
+  });
+
+  it("does not split multi-byte characters when truncating", () => {
+    const message = buildFileMessage("привет.txt", 10);
+
+    expect(message).toBe("file::пр");
+    expect(new TextEncoder().encode(message).byteLength).toBeLessThanOrEqual(
+      10,
+    );
+  });
+
+  it("returns a truncated prefix when the limit is smaller than the prefix", () => {
+    expect(buildFileMessage("notes.txt", 4)).toBe("file");
+    expect(buildFileMessage("notes.txt", 0)).toBe("");
+  });
+});
 
 describe("parseFileMessage", () => {
   it("parses text after the file prefix", () => {

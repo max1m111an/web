@@ -22,6 +22,57 @@ function ensureTextExtension(fileName: string): string {
 }
 
 /**
+ * Truncates a string to the given number of UTF-8 bytes without splitting
+ * multi-byte characters (including surrogate pairs).
+ */
+export function truncateToUtf8Bytes(value: string, maxBytes: number): string {
+  if (maxBytes <= 0) {
+    return "";
+  }
+
+  const encoder = new TextEncoder();
+  let result = "";
+  let usedBytes = 0;
+
+  for (const char of value) {
+    const charBytes = encoder.encode(char).byteLength;
+    if (usedBytes + charBytes > maxBytes) {
+      break;
+    }
+
+    result += char;
+    usedBytes += charBytes;
+  }
+
+  return result;
+}
+
+function getFileName(fileName: string): string {
+  const baseName = fileName.split(/[\\/]/).pop() ?? "";
+  const singleLine = baseName.replace(/[\r\n]+/g, " ").trim();
+  return singleLine || DEFAULT_FILE_NAME;
+}
+
+/**
+ * Builds a `file::` message for the given file name, truncated so that the
+ * whole message fits into `maxBytes` bytes.
+ */
+export function buildFileMessage(fileName: string, maxBytes: number): string {
+  const encoder = new TextEncoder();
+  const prefixBytes = encoder.encode(FILE_MESSAGE_PREFIX).byteLength;
+
+  if (maxBytes <= prefixBytes) {
+    return truncateToUtf8Bytes(FILE_MESSAGE_PREFIX, maxBytes);
+  }
+
+  const name = getFileName(fileName);
+  const availableBytes = maxBytes - prefixBytes;
+  const truncatedName = truncateToUtf8Bytes(name, availableBytes).trimEnd();
+
+  return `${FILE_MESSAGE_PREFIX}${truncatedName}`;
+}
+
+/**
  * Parses messages prefixed with `file::` as text files.
  *
  * The first line after the prefix becomes the file name, while the whole

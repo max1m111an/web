@@ -36,6 +36,29 @@ vi.mock("@components/UI/Input.tsx", () => ({
   )),
 }));
 
+vi.mock("@components/PageComponents/Messages/FilePickerDialog.tsx", () => ({
+  FilePickerDialog: ({
+    open,
+    onOpenChange,
+    onFileSelected,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onFileSelected: (fileName: string) => void;
+  }) =>
+    open ? (
+      <button
+        type="button"
+        onClick={() => {
+          onFileSelected("report.pdf");
+          onOpenChange(false);
+        }}
+      >
+        select-file
+      </button>
+    ) : null,
+}));
+
 const mockSetText = vi.fn();
 const mockClear = vi.fn();
 let mockDraftText = "";
@@ -49,6 +72,7 @@ vi.mock("@meshtastic/sdk-react", () => ({
 }));
 
 vi.mock("lucide-react", () => ({
+  PaperclipIcon: vi.fn(() => <svg data-testid="paperclip-icon" />),
   SendIcon: vi.fn(() => <svg data-testid="send-icon" />),
 }));
 
@@ -71,12 +95,49 @@ describe("MessageInput", () => {
     render(<MessageInput {...defaultProps} {...props} />);
   };
 
-  it("should render the input field, byte counter, and send button", () => {
+  it("should render the input field, byte counter, attach and send buttons", () => {
     renderComponent();
     expect(screen.getByTestId("message-input-field")).toBeInTheDocument();
     expect(screen.getByTestId("byte-counter")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /attach file/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("paperclip-icon")).toBeInTheDocument();
     expect(screen.getByTestId("send-icon")).toBeInTheDocument();
+  });
+
+  it("should insert a file message when a file is selected", () => {
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
+
+    const fileMessage = "file::report.pdf";
+    expect(
+      (screen.getByTestId("message-input-field") as HTMLInputElement).value,
+    ).toBe(fileMessage);
+    expect(mockSetText).toHaveBeenCalledWith(fileMessage);
+    expect(screen.getByTestId("byte-counter")).toHaveTextContent(
+      `${new Blob([fileMessage]).size}/${defaultProps.maxBytes}`,
+    );
+    expect(
+      screen.queryByRole("button", { name: /select-file/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should truncate the file message to maxBytes", () => {
+    renderComponent({ maxBytes: 10 });
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
+
+    const fileMessage = "file::repo";
+    expect(
+      (screen.getByTestId("message-input-field") as HTMLInputElement).value,
+    ).toBe(fileMessage);
+    expect(mockSetText).toHaveBeenCalledWith(fileMessage);
+    expect(screen.getByTestId("byte-counter")).toHaveTextContent(
+      `${new Blob([fileMessage]).size}/10`,
+    );
   });
 
   it("should initialize with the persisted draft text from the SDK", () => {
