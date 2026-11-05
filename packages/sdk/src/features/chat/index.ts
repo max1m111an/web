@@ -11,6 +11,7 @@ export { MessageState } from "./domain/MessageState.ts";
 export type {
   ConversationKey,
   MessageRepository,
+  MessageUpdate,
   RetentionPolicy,
 } from "./domain/MessageRepository.ts";
 export { conversationKeyString } from "./domain/MessageRepository.ts";

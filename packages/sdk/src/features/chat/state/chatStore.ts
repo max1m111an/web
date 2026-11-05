@@ -73,6 +73,26 @@ export class ChatStore {
     }
   }
 
+  /**
+   * Patches a message inside a known bucket. Used for file transfers, which
+   * rewrite the envelope text as progress/completion arrives.
+   */
+  updateMessage(
+    key: string,
+    id: number,
+    patch: Partial<Pick<Message, "text" | "state">>,
+  ): void {
+    const bucket = this.buckets.get(key);
+    if (!bucket) return;
+    const idx = bucket.value.findIndex((m) => m.id === id);
+    if (idx === -1) return;
+    const existing = bucket.value[idx];
+    if (!existing) return;
+    const next = bucket.value.slice();
+    next[idx] = { ...existing, ...patch };
+    bucket.value = next;
+  }
+
   updateState(id: number, state: MessageState): void {
     for (const [, bucket] of this.buckets) {
       const idx = bucket.value.findIndex((m) => m.id === id);

@@ -44,14 +44,14 @@ vi.mock("@components/PageComponents/Messages/FilePickerDialog.tsx", () => ({
   }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onFilesSelected: (files: { name: string; sizeBytes: number }[]) => void;
+    onFilesSelected: (files: File[]) => void;
   }) =>
     open ? (
       <div>
         <button
           type="button"
           onClick={() => {
-            onFilesSelected([{ name: "report.pdf", sizeBytes: 1536 }]);
+            onFilesSelected([new File(["report"], "report.pdf")]);
             onOpenChange(false);
           }}
         >
@@ -60,7 +60,7 @@ vi.mock("@components/PageComponents/Messages/FilePickerDialog.tsx", () => ({
         <button
           type="button"
           onClick={() => {
-            onFilesSelected([{ name: "notes.txt", sizeBytes: 20 }]);
+            onFilesSelected([new File(["notes"], "notes.txt")]);
             onOpenChange(false);
           }}
         >
@@ -70,8 +70,8 @@ vi.mock("@components/PageComponents/Messages/FilePickerDialog.tsx", () => ({
           type="button"
           onClick={() => {
             onFilesSelected([
-              { name: "report.pdf", sizeBytes: 1536 },
-              { name: "notes.txt", sizeBytes: 20 },
+              new File(["report"], "report.pdf"),
+              new File(["notes"], "notes.txt"),
             ]);
             onOpenChange(false);
           }}
@@ -103,10 +103,12 @@ vi.mock("lucide-react", () => ({
 
 describe("MessageInput", () => {
   const mockOnSend = vi.fn();
+  const mockOnSendFiles = vi.fn();
   const directConv: ConversationKey = { kind: "direct", peer: 123 };
   const broadcastConv: ConversationKey = { kind: "channel", channel: 0 };
   const defaultProps: MessageInputProps = {
     onSend: mockOnSend,
+    onSendFiles: mockOnSendFiles,
     conversation: directConv,
     maxBytes: 256,
   };
@@ -131,6 +133,14 @@ describe("MessageInput", () => {
     expect(screen.getByTestId("send-icon")).toBeInTheDocument();
   });
 
+  it("hides the attach button when file transfers are disabled", () => {
+    renderComponent({ onSendFiles: undefined });
+
+    expect(
+      screen.queryByRole("button", { name: /attach file/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows selected files as square previews above the input", () => {
     renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
@@ -150,14 +160,9 @@ describe("MessageInput", () => {
     expect(pendingFiles).toHaveLength(2);
     expect(pendingFiles[0]).toHaveAttribute("title", "report.pdf");
     expect(pendingFiles[0]).toHaveTextContent("report.pdf");
-    expect(pendingFiles[0]).toHaveTextContent("1.5 KB");
     expect(pendingFiles[1]).toHaveAttribute("title", "notes.txt");
     expect(pendingFiles[1]).toHaveTextContent("notes.txt");
-    expect(pendingFiles[1]).toHaveTextContent("20 B");
     expect(screen.getAllByTestId("file-text-icon")).toHaveLength(2);
-    expect(
-      screen.getByRole("button", { name: /attach file/i }),
-    ).not.toBeDisabled();
     expect(screen.getByTestId("byte-counter")).toHaveTextContent(
       `0/${defaultProps.maxBytes}`,
     );
@@ -177,19 +182,23 @@ describe("MessageInput", () => {
     expect(pendingFiles[1]).toHaveAttribute("title", "notes.txt");
   });
 
-  it("truncates the file message name to maxBytes", async () => {
-    renderComponent({ maxBytes: 10 });
+  it("sends selected files as File objects through onSendFiles", async () => {
+    renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
 
     fireEvent.submit(screen.getByRole("form"));
 
     await waitFor(() => {
-      expect(mockOnSend).toHaveBeenCalledWith("file::repo");
+      expect(mockOnSendFiles).toHaveBeenCalledTimes(1);
+      const sent = mockOnSendFiles.mock.calls[0]?.[0] as File[];
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.name).toBe("report.pdf");
     });
+    expect(mockOnSend).not.toHaveBeenCalled();
   });
 
-  it("sends the text and each file as separate messages in order", async () => {
+  it("sends the text first, then the files in one call", async () => {
     renderComponent();
     const input = screen.getByTestId("message-input-field") as HTMLInputElement;
     const formElement = screen.getByRole("form");
@@ -210,10 +219,11 @@ describe("MessageInput", () => {
     fireEvent.submit(formElement);
 
     await waitFor(() => {
-      expect(mockOnSend.mock.calls).toEqual([
-        ["hello"],
-        ["file::report.pdf"],
-        ["file::notes.txt"],
+      expect(mockOnSend).toHaveBeenCalledWith("hello");
+      const sent = mockOnSendFiles.mock.calls[0]?.[0] as File[];
+      expect(sent.map((file) => file.name)).toEqual([
+        "report.pdf",
+        "notes.txt",
       ]);
       expect(mockClear).toHaveBeenCalled();
       expect(input.value).toBe("");
@@ -233,9 +243,11 @@ describe("MessageInput", () => {
     fireEvent.submit(screen.getByRole("form"));
 
     await waitFor(() => {
-      expect(mockOnSend.mock.calls).toEqual([
-        ["file::report.pdf"],
-        ["file::notes.txt"],
+      expect(mockOnSend).not.toHaveBeenCalled();
+      const sent = mockOnSendFiles.mock.calls[0]?.[0] as File[];
+      expect(sent.map((file) => file.name)).toEqual([
+        "report.pdf",
+        "notes.txt",
       ]);
       expect(mockClear).toHaveBeenCalled();
       expect(screen.queryAllByTestId("pending-file")).toHaveLength(0);
@@ -359,6 +371,7 @@ describe("MessageInput", () => {
     });
 
     expect(mockOnSend).not.toHaveBeenCalled();
+    expect(mockOnSendFiles).not.toHaveBeenCalled();
     expect(mockClear).not.toHaveBeenCalled();
   });
 

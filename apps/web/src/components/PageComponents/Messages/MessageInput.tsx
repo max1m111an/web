@@ -1,10 +1,7 @@
-import {
-  FilePickerDialog,
-  type SelectedFile,
-} from "@components/PageComponents/Messages/FilePickerDialog.tsx";
+import { FilePickerDialog } from "@components/PageComponents/Messages/FilePickerDialog.tsx";
 import { Button } from "@components/UI/Button.tsx";
 import { Input } from "@components/UI/Input.tsx";
-import { buildFileMessage, formatFileSize } from "@core/utils/fileMessage.ts";
+import { formatFileSize } from "@core/utils/fileMessage.ts";
 import type { ConversationKey } from "@meshtastic/sdk";
 import { useDraft } from "@meshtastic/sdk-react";
 import { FileText, PaperclipIcon, SendIcon, X } from "lucide-react";
@@ -13,6 +10,12 @@ import { useTranslation } from "react-i18next";
 
 export interface MessageInputProps {
   onSend: (message: string) => void | Promise<void>;
+  /**
+   * Sends file attachments over the mesh file-transfer protocol. When
+   * omitted, the attach button is hidden (e.g. broadcast chats, which cannot
+   * provide the stop-and-wait semantics transfers need).
+   */
+  onSendFiles?: (files: File[]) => void | Promise<void>;
   conversation: ConversationKey;
   maxBytes: number;
 }
@@ -23,6 +26,7 @@ function calculateBytes(value: string): number {
 
 export const MessageInput = ({
   onSend,
+  onSendFiles,
   conversation,
   maxBytes,
 }: MessageInputProps) => {
@@ -30,8 +34,9 @@ export const MessageInput = ({
   const { t } = useTranslation("messages");
 
   const [localDraft, setLocalDraft] = useState(persistedDraft);
-  const [pendingFiles, setPendingFiles] = useState<SelectedFile[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isFileDialogOpen, setIsFileDialogOpen] = useState(false);
+  const attachmentsEnabled = onSendFiles !== undefined;
 
   const messageBytes = calculateBytes(localDraft);
 
@@ -44,7 +49,7 @@ export const MessageInput = ({
     }
   };
 
-  const handleFilesSelected = (files: SelectedFile[]) => {
+  const handleFilesSelected = (files: File[]) => {
     if (!files.length) {
       return;
     }
@@ -62,11 +67,11 @@ export const MessageInput = ({
     e.preventDefault();
     const text = localDraft.trim();
 
-    if (!text && pendingFiles.length === 0) {
+    const filesToSend = attachmentsEnabled ? pendingFiles : [];
+
+    if (!text && filesToSend.length === 0) {
       return;
     }
-
-    const filesToSend = pendingFiles;
 
     startTransition(() => {
       setLocalDraft("");
@@ -78,8 +83,8 @@ export const MessageInput = ({
       await onSend(text);
     }
 
-    for (const file of filesToSend) {
-      await onSend(buildFileMessage(file.name, maxBytes));
+    if (filesToSend.length > 0 && onSendFiles) {
+      await onSendFiles(filesToSend);
     }
   };
 
@@ -106,7 +111,7 @@ export const MessageInput = ({
                     {file.name}
                   </span>
                   <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                    {formatFileSize(file.sizeBytes)}
+                    {formatFileSize(file.size)}
                   </span>
                   <button
                     type="button"
@@ -124,16 +129,18 @@ export const MessageInput = ({
         )}
 
         <div className="flex grow gap-1">
-          <Button
-            type="button"
-            variant="subtle"
-            size="icon"
-            aria-label={t("file.attach")}
-            title={t("file.attach")}
-            onClick={() => setIsFileDialogOpen(true)}
-          >
-            <PaperclipIcon size={16} />
-          </Button>
+          {attachmentsEnabled && (
+            <Button
+              type="button"
+              variant="subtle"
+              size="icon"
+              aria-label={t("file.attach")}
+              title={t("file.attach")}
+              onClick={() => setIsFileDialogOpen(true)}
+            >
+              <PaperclipIcon size={16} />
+            </Button>
+          )}
 
           <label className="w-full" htmlFor="messageInput">
             <Input
@@ -160,11 +167,13 @@ export const MessageInput = ({
         </div>
       </form>
 
-      <FilePickerDialog
-        open={isFileDialogOpen}
-        onOpenChange={setIsFileDialogOpen}
-        onFilesSelected={handleFilesSelected}
-      />
+      {attachmentsEnabled && (
+        <FilePickerDialog
+          open={isFileDialogOpen}
+          onOpenChange={setIsFileDialogOpen}
+          onFilesSelected={handleFilesSelected}
+        />
+      )}
     </div>
   );
 };

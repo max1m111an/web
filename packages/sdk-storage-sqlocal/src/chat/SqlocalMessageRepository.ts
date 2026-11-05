@@ -2,6 +2,7 @@ import type {
   ConversationKey,
   Message,
   MessageRepository,
+  MessageUpdate,
   RetentionPolicy,
 } from "@meshtastic/sdk";
 import { conversationKeyString, MessageState } from "@meshtastic/sdk";
@@ -52,21 +53,32 @@ export class SqlocalMessageRepository implements MessageRepository {
     return rows.reverse().map(rowToMessage);
   }
 
-  async append(message: Message): Promise<void> {
-    await this.appendBatch([message]);
+  async append(message: Message, key?: ConversationKey): Promise<void> {
+    await this.appendBatch([message], key);
   }
 
-  async appendBatch(input: ReadonlyArray<Message>): Promise<void> {
+  async appendBatch(
+    input: ReadonlyArray<Message>,
+    key?: ConversationKey,
+  ): Promise<void> {
     if (input.length === 0) return;
-    const rows = input.map((m) => messageToRow(this.deviceId, m));
+    const rows = input.map((m) => messageToRow(this.deviceId, m, key));
     await this.db.insert(messages).values(rows).onConflictDoNothing();
-    this.notify(input);
+    this.notify(input, key);
   }
 
   async updateState(id: number, state: MessageState): Promise<void> {
     await this.db
       .update(messages)
       .set({ state })
+      .where(and(eq(messages.deviceId, this.deviceId), eq(messages.id, id))!);
+  }
+
+  async updateMessage(id: number, patch: MessageUpdate): Promise<void> {
+    if (patch.text === undefined && patch.state === undefined) return;
+    await this.db
+      .update(messages)
+      .set(patch)
       .where(and(eq(messages.deviceId, this.deviceId), eq(messages.id, id))!);
   }
 
@@ -119,15 +131,16 @@ export class SqlocalMessageRepository implements MessageRepository {
     )!;
   }
 
-  private notify(input: ReadonlyArray<Message>): void {
+  private notify(
+    input: ReadonlyArray<Message>,
+    override?: ConversationKey,
+  ): void {
     if (!this.coordinator) return;
     const seen = new Set<string>();
     for (const m of input) {
-      const conv: ConversationKey =
-        m.type === "direct"
-          ? { kind: "direct", peer: m.from }
-          : { kind: "channel", channel: m.channel };
-      const key = conversationKeyString(conv);
+      const key = override
+        ? conversationKeyString(override)
+        : conversationKeyString(inferConversationKey(m));
       if (seen.has(key)) continue;
       seen.add(key);
       this.coordinator.broadcast({
@@ -165,11 +178,23 @@ function rowToMessage(row: MessageRow): Message {
   };
 }
 
-function messageToRow(deviceId: number, message: Message): MessageRow {
-  const conv: ConversationKey =
-    message.type === "direct"
-      ? { kind: "direct", peer: message.from }
-      : { kind: "channel", channel: message.channel };
+/**
+ * Infers the conversation from the message itself. Outbound direct messages
+ * carry `from === myNodeNum`, so callers that know the peer should pass an
+ * explicit key instead.
+ */
+function inferConversationKey(message: Message): ConversationKey {
+  return message.type === "direct"
+    ? { kind: "direct", peer: message.from }
+    : { kind: "channel", channel: message.channel };
+}
+
+function messageToRow(
+  deviceId: number,
+  message: Message,
+  key?: ConversationKey,
+): MessageRow {
+  const conv = key ?? inferConversationKey(message);
   return {
     id: message.id,
     deviceId,

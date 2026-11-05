@@ -27,6 +27,8 @@ export interface PacketMetadata<T> {
   to: number;
   channel: ChannelNumber;
   data: T;
+  /** Data.request_id: the packet this one answers or acks. */
+  requestId?: number;
 }
 
 export enum EmitterScope {

@@ -22,6 +22,12 @@
     "download": "Download {{fileName}}",
     "attach": "Attach files",
     "remove": "Remove {{fileName}}",
+    "transfer": {
+      "progress": "Transferring… {{percent}}%",
+      "failed": "Transfer failed",
+      "unavailable": "File content unavailable",
+      "sendFailed": "Could not send {{fileName}}"
+    },
     "dialog": {
       "title": "Attach files",
       "description": "Files will be attached to the message.",

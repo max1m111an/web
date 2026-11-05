@@ -14,15 +14,10 @@ import type { ChangeEvent, DragEvent } from "react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export interface SelectedFile {
-  name: string;
-  sizeBytes: number;
-}
-
 export interface FilePickerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFilesSelected: (files: SelectedFile[]) => void;
+  onFilesSelected: (files: File[]) => void;
 }
 
 export const FilePickerDialog = ({
@@ -39,12 +34,7 @@ export const FilePickerDialog = ({
       return;
     }
 
-    onFilesSelected(
-      Array.from(files).map((file) => ({
-        name: file.name,
-        sizeBytes: file.size,
-      })),
-    );
+    onFilesSelected(Array.from(files));
     onOpenChange(false);
   };
 

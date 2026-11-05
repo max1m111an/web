@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import * as Protobuf from "@meshtastic/protobufs";
 import type { ResultType } from "better-result";
 import { describe, expect, it } from "vitest";
 import { MeshClient } from "../../core/client/MeshClient.ts";
@@ -140,7 +142,7 @@ describe("ChatClient.send optimistic append", () => {
     expect(messages.value[0]!.state).toBe(MessageState.Failed);
   });
 
-  it("flips outbound state to Ack on a routing-error=NONE packet matching the id", async () => {
+  it("matches a routing ack to the message by request_id", async () => {
     const { transport } = createFakeTransport();
     const client = new MeshClient({ transport });
     const messages = client.chat.messages(ChannelNumber.Primary);
@@ -148,16 +150,88 @@ describe("ChatClient.send optimistic append", () => {
     const result = await sendBroadcast(client, "ack me");
     if (result.status !== "ok") throw new Error("send failed");
 
+    // The firmware gives the routing ack its own fresh id and references the
+    // original message via Data.request_id.
     client.events.onRoutingPacket.dispatch({
-      id: result.value,
-      from: 0,
+      id: 123456,
+      requestId: result.value,
+      from: 5,
       to: 0,
       channel: 0,
       type: "broadcast",
       rxTime: new Date(),
-      data: { variant: { case: "errorReason", value: 0 } },
-    } as never);
+      data: create(Protobuf.Mesh.RoutingSchema, {
+        variant: {
+          case: "errorReason",
+          value: Protobuf.Mesh.Routing_Error.NONE,
+        },
+      }),
+    });
 
     expect(messages.value[0]!.state).toBe(MessageState.Ack);
+  });
+
+  it("matches a routing NAK to the message by request_id", async () => {
+    const { transport } = createFakeTransport();
+    const client = new MeshClient({ transport });
+    const messages = client.chat.messages(ChannelNumber.Primary);
+
+    const result = await sendBroadcast(client, "fail me");
+    if (result.status !== "ok") throw new Error("send failed");
+
+    client.events.onRoutingPacket.dispatch({
+      id: 654321,
+      requestId: result.value,
+      from: 5,
+      to: 0,
+      channel: 0,
+      type: "broadcast",
+      rxTime: new Date(),
+      data: create(Protobuf.Mesh.RoutingSchema, {
+        variant: {
+          case: "errorReason",
+          value: Protobuf.Mesh.Routing_Error.MAX_RETRANSMIT,
+        },
+      }),
+    });
+
+    expect(messages.value[0]!.state).toBe(MessageState.Failed);
+  });
+
+  it("marks a self-addressed message Ack when the radio acks it", async () => {
+    const { transport } = createFakeTransport();
+    const client = new MeshClient({ transport });
+    const myNode = 0xdeadbeef;
+    client.events.onMyNodeInfo.dispatch(
+      create(Protobuf.Mesh.MyNodeInfoSchema, { myNodeNum: myNode }),
+    );
+    const direct = client.chat.direct(myNode);
+
+    // A self-DM is delivered locally by the radio and never echoed back via
+    // fromradio; the routing ack is the only delivery signal.
+    const result: SendResult = await withAckFlush(client, () =>
+      client.chat.send({ text: "note to self", destination: myNode }),
+    );
+    if (result.status !== "ok") throw new Error("send failed");
+
+    client.events.onRoutingPacket.dispatch({
+      id: 777777,
+      requestId: result.value,
+      from: myNode,
+      to: myNode,
+      channel: 0,
+      type: "direct",
+      rxTime: new Date(),
+      data: create(Protobuf.Mesh.RoutingSchema, {
+        variant: {
+          case: "errorReason",
+          value: Protobuf.Mesh.Routing_Error.NONE,
+        },
+      }),
+    });
+
+    expect(direct.value).toHaveLength(1);
+    expect(direct.value[0]!.to).toBe(myNode);
+    expect(direct.value[0]!.state).toBe(MessageState.Ack);
   });
 });

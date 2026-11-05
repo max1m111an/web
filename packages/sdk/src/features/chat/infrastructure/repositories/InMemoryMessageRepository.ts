@@ -4,6 +4,7 @@ import {
   type ConversationKey,
   conversationKeyString,
   type MessageRepository,
+  type MessageUpdate,
   type RetentionPolicy,
 } from "../../domain/MessageRepository.ts";
 
@@ -31,13 +32,16 @@ export class InMemoryMessageRepository implements MessageRepository {
     return bucket.slice(start, end);
   }
 
-  async append(message: Message): Promise<void> {
-    await this.appendBatch([message]);
+  async append(message: Message, key?: ConversationKey): Promise<void> {
+    await this.appendBatch([message], key);
   }
 
-  async appendBatch(messages: ReadonlyArray<Message>): Promise<void> {
+  async appendBatch(
+    messages: ReadonlyArray<Message>,
+    key?: ConversationKey,
+  ): Promise<void> {
     for (const message of messages) {
-      const k = this.inferKey(message);
+      const k = key ? conversationKeyString(key) : this.inferKey(message);
       const bucket = this.buckets.get(k) ?? [];
       bucket.push(message);
       bucket.sort((a, b) => a.rxTime.getTime() - b.rxTime.getTime());
@@ -54,6 +58,17 @@ export class InMemoryMessageRepository implements MessageRepository {
         bucket[idx] = { ...existing, state };
         return;
       }
+    }
+  }
+
+  async updateMessage(id: number, patch: MessageUpdate): Promise<void> {
+    for (const bucket of this.buckets.values()) {
+      const idx = bucket.findIndex((m) => m.id === id);
+      if (idx === -1) continue;
+      const existing = bucket[idx];
+      if (!existing) continue;
+      bucket[idx] = { ...existing, ...patch };
+      return;
     }
   }
 

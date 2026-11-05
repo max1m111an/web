@@ -86,6 +86,7 @@ export type {
   DraftRepository,
   Message,
   MessageRepository,
+  MessageUpdate,
   RetentionPolicy,
   SendTextError,
   SendTextInput,
@@ -138,9 +139,32 @@ export type { Position } from "./src/features/position/index.ts";
 export { TraceRouteClient } from "./src/features/traceroute/index.ts";
 export type { TraceRoute } from "./src/features/traceroute/index.ts";
 
-export { FilesClient } from "./src/features/files/index.ts";
+export {
+  buildFileMessageEnvelope,
+  decodeFileTransferFrame,
+  encodeFileTransferFrame,
+  FILE_MESSAGE_PREFIX,
+  FILE_TRANSFER_CHUNK_SIZE,
+  FILE_TRANSFER_MAX_FILENAME_BYTES,
+  FILE_TRANSFER_MAX_FILE_SIZE,
+  FILE_TRANSFER_PORTNUM,
+  decodeBase64,
+  encodeBase64,
+  FileTransferError,
+  FileTransferStatus,
+  FileTransferType,
+  FilesClient,
+  parseFileMessage,
+  sanitizeFileName,
+} from "./src/features/files/index.ts";
 export type {
+  FileMessageEnvelope,
   FileTransfer,
+  FileTransferErrorCode,
+  FileTransferEvent,
+  FileTransferFrame,
+  ParsedFileMessage,
+  TransferDirection,
   TransferStatus,
 } from "./src/features/files/index.ts";
 

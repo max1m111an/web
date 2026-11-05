@@ -66,9 +66,7 @@ describe("FilePickerDialog", () => {
       dataTransfer: { files: [file] },
     });
 
-    expect(onFilesSelected).toHaveBeenCalledWith([
-      { name: "report.pdf", sizeBytes: file.size },
-    ]);
+    expect(onFilesSelected).toHaveBeenCalledWith([file]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -84,10 +82,7 @@ describe("FilePickerDialog", () => {
     });
     fireEvent.change(input);
 
-    expect(onFilesSelected).toHaveBeenCalledWith([
-      { name: "notes.txt", sizeBytes: firstFile.size },
-      { name: "report.pdf", sizeBytes: secondFile.size },
-    ]);
+    expect(onFilesSelected).toHaveBeenCalledWith([firstFile, secondFile]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

@@ -8,6 +8,17 @@ import type { DeviceOutput } from "../transport/Transport.ts";
 import { DeviceStatusEnum } from "../transport/Transport.ts";
 import { ChannelNumber, Emitter, type PacketMetadata } from "../types.ts";
 import type { Xmodem } from "../xmodem/Xmodem.ts";
+import {
+  decodeFileTransferFrame,
+  FILE_TRANSFER_PORTNUM,
+} from "../../features/files/protocol/FileTransferCodec.ts";
+
+/**
+ * `FILE_TRANSFER_APP` is not present in the published protobufs yet, so the
+ * numeric port is bridged into the enum-typed switch below.
+ */
+const FILE_TRANSFER_PORT =
+  FILE_TRANSFER_PORTNUM as unknown as Protobuf.Portnums.PortNum;
 
 /**
  * A minimal client-shape surface that the packet decoder writes into.
@@ -300,6 +311,7 @@ function handleDecodedPacket(
     from: meshPacket.from,
     to: meshPacket.to,
     channel: meshPacket.channel,
+    requestId: dataPacket.requestId || undefined,
   };
 
   sink.log.trace(
@@ -564,6 +576,13 @@ function handleDecodedPacket(
       sink.events.onAtakForwarderPacket.dispatch({
         ...packetMetadata,
         data: dataPacket.payload,
+      });
+      break;
+    }
+    case FILE_TRANSFER_PORT: {
+      sink.events.onFileTransferPacket.dispatch({
+        ...packetMetadata,
+        data: decodeFileTransferFrame(dataPacket.payload),
       });
       break;
     }
