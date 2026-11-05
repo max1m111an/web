@@ -8,6 +8,7 @@ export interface FileMessageData {
   fileName: string;
   content: string;
   sizeBytes: number;
+  caption?: string;
 }
 
 function sanitizeFileName(fileName: string): string {
@@ -73,17 +74,24 @@ export function buildFileMessage(fileName: string, maxBytes: number): string {
 }
 
 /**
- * Parses messages prefixed with `file::` as text files.
+ * Parses messages that contain a `file::` marker as text files.
  *
+ * The marker may start the message or follow a text caption on a new line.
  * The first line after the prefix becomes the file name, while the whole
  * text after the prefix is used as the file content.
  */
 export function parseFileMessage(text: string): FileMessageData | null {
-  if (!text.startsWith(FILE_MESSAGE_PREFIX)) {
+  const markerIndex = findFileMarkerIndex(text);
+
+  if (markerIndex === -1) {
     return null;
   }
 
-  const content = text.slice(FILE_MESSAGE_PREFIX.length);
+  const caption = text
+    .slice(0, markerIndex)
+    .replace(/\r?\n$/, "")
+    .trimEnd();
+  const content = text.slice(markerIndex + FILE_MESSAGE_PREFIX.length);
   const firstLine = content.split(/\r?\n/, 1)[0] ?? "";
   const fileName = ensureTextExtension(sanitizeFileName(firstLine));
 
@@ -91,7 +99,48 @@ export function parseFileMessage(text: string): FileMessageData | null {
     fileName,
     content,
     sizeBytes: new TextEncoder().encode(content).byteLength,
+    ...(caption ? { caption } : {}),
   };
+}
+
+function findFileMarkerIndex(text: string): number {
+  if (text.startsWith(FILE_MESSAGE_PREFIX)) {
+    return 0;
+  }
+
+  const marker = `\n${FILE_MESSAGE_PREFIX}`;
+  const index = text.lastIndexOf(marker);
+
+  return index === -1 ? -1 : index + 1;
+}
+
+/**
+ * Builds a message that starts with the user's text and ends with the
+ * `file::` marker. The text is truncated when necessary so the whole message
+ * fits into `maxBytes`.
+ */
+export function buildMessageWithFile(
+  text: string,
+  fileName: string,
+  maxBytes: number,
+): string {
+  const trimmedText = text.trim();
+
+  if (!trimmedText) {
+    return buildFileMessage(fileName, maxBytes);
+  }
+
+  const fileMessage = buildFileMessage(fileName, maxBytes);
+  const encoder = new TextEncoder();
+  const separatorBytes = 1; // "\n"
+  const availableTextBytes =
+    maxBytes - encoder.encode(fileMessage).byteLength - separatorBytes;
+  const truncatedText =
+    availableTextBytes > 0
+      ? truncateToUtf8Bytes(trimmedText, availableTextBytes).trimEnd()
+      : "";
+
+  return truncatedText ? `${truncatedText}\n${fileMessage}` : fileMessage;
 }
 
 export function formatFileSize(bytes: number): string {

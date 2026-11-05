@@ -66,7 +66,7 @@ describe("FilePickerDialog", () => {
       dataTransfer: { files: [file] },
     });
 
-    expect(onFileSelected).toHaveBeenCalledWith("report.pdf");
+    expect(onFileSelected).toHaveBeenCalledWith("report.pdf", file.size);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -81,7 +81,7 @@ describe("FilePickerDialog", () => {
     });
     fireEvent.change(input);
 
-    expect(onFileSelected).toHaveBeenCalledWith("notes.txt");
+    expect(onFileSelected).toHaveBeenCalledWith("notes.txt", file.size);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

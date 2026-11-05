@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 export interface FilePickerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFileSelected: (fileName: string) => void;
+  onFileSelected: (fileName: string, sizeBytes: number) => void;
 }
 
 export const FilePickerDialog = ({
@@ -34,7 +34,7 @@ export const FilePickerDialog = ({
       return;
     }
 
-    onFileSelected(file.name);
+    onFileSelected(file.name, file.size);
     onOpenChange(false);
   };
 

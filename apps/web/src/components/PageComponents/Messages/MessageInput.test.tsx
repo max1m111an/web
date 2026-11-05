@@ -44,13 +44,13 @@ vi.mock("@components/PageComponents/Messages/FilePickerDialog.tsx", () => ({
   }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onFileSelected: (fileName: string) => void;
+    onFileSelected: (fileName: string, sizeBytes: number) => void;
   }) =>
     open ? (
       <button
         type="button"
         onClick={() => {
-          onFileSelected("report.pdf");
+          onFileSelected("report.pdf", 1536);
           onOpenChange(false);
         }}
       >
@@ -72,8 +72,10 @@ vi.mock("@meshtastic/sdk-react", () => ({
 }));
 
 vi.mock("lucide-react", () => ({
+  FileText: vi.fn(() => <svg data-testid="file-text-icon" />),
   PaperclipIcon: vi.fn(() => <svg data-testid="paperclip-icon" />),
   SendIcon: vi.fn(() => <svg data-testid="send-icon" />),
+  X: vi.fn(() => <svg data-testid="x-icon" />),
 }));
 
 describe("MessageInput", () => {
@@ -106,23 +108,31 @@ describe("MessageInput", () => {
     expect(screen.getByTestId("send-icon")).toBeInTheDocument();
   });
 
-  it("should insert a file message when a file is selected", () => {
+  it("shows a selected file as a square preview above the input", () => {
     renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
 
+    const input = screen.getByTestId("message-input-field") as HTMLInputElement;
     const fileMessage = "file::report.pdf";
+
+    expect(input.value).toBe("");
+    expect(mockSetText).not.toHaveBeenCalled();
+
+    const pendingFile = screen.getByTestId("pending-file");
+
+    expect(pendingFile).toHaveAttribute("title", "report.pdf");
+    expect(pendingFile).toHaveTextContent("report.pdf");
+    expect(pendingFile).toHaveTextContent("1.5 KB");
+    expect(screen.getByTestId("file-text-icon")).toBeInTheDocument();
     expect(
-      (screen.getByTestId("message-input-field") as HTMLInputElement).value,
-    ).toBe(fileMessage);
-    expect(mockSetText).toHaveBeenCalledWith(fileMessage);
+      screen.getByRole("button", { name: /remove report\.pdf/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /attach file/i })).toBeDisabled();
     expect(screen.getByTestId("byte-counter")).toHaveTextContent(
       `${new Blob([fileMessage]).size}/${defaultProps.maxBytes}`,
     );
-    expect(
-      screen.queryByRole("button", { name: /select-file/i }),
-    ).not.toBeInTheDocument();
   });
 
   it("should truncate the file message to maxBytes", () => {
@@ -130,14 +140,66 @@ describe("MessageInput", () => {
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
 
-    const fileMessage = "file::repo";
     expect(
       (screen.getByTestId("message-input-field") as HTMLInputElement).value,
-    ).toBe(fileMessage);
-    expect(mockSetText).toHaveBeenCalledWith(fileMessage);
+    ).toBe("");
+    expect(mockSetText).not.toHaveBeenCalled();
+    expect(screen.getByTestId("byte-counter")).toHaveTextContent("10/10");
+  });
+
+  it("sends the text before the attached file", async () => {
+    renderComponent();
+    const input = screen.getByTestId("message-input-field") as HTMLInputElement;
+    const formElement = screen.getByRole("form");
+
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
+
+    const expectedMessage = "hello\nfile::report.pdf";
+
+    expect(input.value).toBe("hello");
     expect(screen.getByTestId("byte-counter")).toHaveTextContent(
-      `${new Blob([fileMessage]).size}/10`,
+      `${new Blob([expectedMessage]).size}/${defaultProps.maxBytes}`,
     );
+
+    fireEvent.submit(formElement);
+
+    await waitFor(() => {
+      expect(mockOnSend).toHaveBeenCalledWith(expectedMessage);
+      expect(mockClear).toHaveBeenCalled();
+      expect(input.value).toBe("");
+      expect(screen.queryByTestId("pending-file")).not.toBeInTheDocument();
+    });
+  });
+
+  it("sends the file when the input is empty", async () => {
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
+
+    fireEvent.submit(screen.getByRole("form"));
+
+    await waitFor(() => {
+      expect(mockOnSend).toHaveBeenCalledWith("file::report.pdf");
+      expect(mockClear).toHaveBeenCalled();
+      expect(screen.queryByTestId("pending-file")).not.toBeInTheDocument();
+    });
+  });
+
+  it("removes the pending file", () => {
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /remove report\.pdf/i }),
+    );
+
+    expect(screen.queryByTestId("pending-file")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /attach file/i }),
+    ).not.toBeDisabled();
   });
 
   it("should initialize with the persisted draft text from the SDK", () => {

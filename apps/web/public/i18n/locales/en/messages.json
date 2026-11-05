@@ -21,9 +21,10 @@
   "file": {
     "download": "Download {{fileName}}",
     "attach": "Attach file",
+    "remove": "Remove {{fileName}}",
     "dialog": {
       "title": "Attach a file",
-      "description": "The file name will be added to the message.",
+      "description": "The file will be attached to the message.",
       "dropHint": "Drag and drop a file here",
       "dropActive": "Drop the file to attach it",
       "chooseHint": "or click this area to choose a file",
