@@ -1,74 +1,14 @@
+import { buildFileMessageEnvelope, decodeBase64 } from "@meshtastic/sdk";
 import { describe, expect, it } from "vitest";
-import {
-  buildFileMessage,
-  formatFileSize,
-  parseFileMessage,
-  truncateToUtf8Bytes,
-} from "./fileMessage.ts";
-
-describe("truncateToUtf8Bytes", () => {
-  it("returns the value unchanged when it fits", () => {
-    expect(truncateToUtf8Bytes("notes.txt", 20)).toBe("notes.txt");
-  });
-
-  it("truncates ascii text by bytes", () => {
-    expect(truncateToUtf8Bytes("notes.txt", 5)).toBe("notes");
-  });
-
-  it("does not split multi-byte characters", () => {
-    expect(truncateToUtf8Bytes("привет", 5)).toBe("пр");
-  });
-
-  it("returns an empty string for non-positive limits", () => {
-    expect(truncateToUtf8Bytes("notes", 0)).toBe("");
-    expect(truncateToUtf8Bytes("notes", -1)).toBe("");
-  });
-});
-
-describe("buildFileMessage", () => {
-  it("builds a file message with the prefix", () => {
-    expect(buildFileMessage("notes.txt", 200)).toBe("file::notes.txt");
-  });
-
-  it("uses only the base name and removes line breaks", () => {
-    expect(buildFileMessage("C:\\docs\\report.pdf", 200)).toBe(
-      "file::report.pdf",
-    );
-    expect(buildFileMessage("re\nport.txt", 200)).toBe("file::re port.txt");
-  });
-
-  it("falls back to a default name for an empty value", () => {
-    expect(buildFileMessage("   ", 200)).toBe("file::file");
-  });
-
-  it("truncates the file name to fit the byte limit", () => {
-    const message = buildFileMessage("a-very-long-file-name.txt", 10);
-
-    expect(message).toBe("file::a-ve");
-    expect(new TextEncoder().encode(message).byteLength).toBe(10);
-  });
-
-  it("does not split multi-byte characters when truncating", () => {
-    const message = buildFileMessage("привет.txt", 10);
-
-    expect(message).toBe("file::пр");
-    expect(new TextEncoder().encode(message).byteLength).toBeLessThanOrEqual(
-      10,
-    );
-  });
-
-  it("returns a truncated prefix when the limit is smaller than the prefix", () => {
-    expect(buildFileMessage("notes.txt", 4)).toBe("file");
-    expect(buildFileMessage("notes.txt", 0)).toBe("");
-  });
-});
+import { formatFileSize, parseFileMessage } from "./fileMessage.ts";
 
 describe("parseFileMessage", () => {
-  it("parses text after the file prefix", () => {
+  it("parses legacy text after the file prefix", () => {
     expect(parseFileMessage("file::hello world!")).toEqual({
       fileName: "hello world!.txt",
       content: "hello world!",
       sizeBytes: 12,
+      legacy: true,
     });
   });
 
@@ -87,35 +27,80 @@ describe("parseFileMessage", () => {
       fileName: "file.txt",
       content: "",
       sizeBytes: 0,
+      legacy: true,
     });
   });
 
   it("does not duplicate an existing text extension", () => {
-    expect(parseFileMessage("file::notes.TXT")).toEqual({
-      fileName: "notes.TXT",
-      content: "notes.TXT",
-      sizeBytes: 9,
-    });
+    expect(parseFileMessage("file::notes.TXT")?.fileName).toBe("notes.TXT");
   });
 
-  it("sanitizes characters that are invalid in file names", () => {
-    expect(parseFileMessage("file::a/b")).toEqual({
-      fileName: "a_b.txt",
-      content: "a/b",
-      sizeBytes: 3,
-    });
+  it("strips path components from legacy file names", () => {
+    expect(parseFileMessage("file::a/b")?.fileName).toBe("b.txt");
   });
 
   it("uses the first line as the file name and keeps the full content", () => {
-    expect(parseFileMessage("file::notes\nbody")).toEqual({
-      fileName: "notes.txt",
-      content: "notes\nbody",
-      sizeBytes: 10,
-    });
+    const parsed = parseFileMessage("file::notes\nbody");
+
+    expect(parsed?.fileName).toBe("notes.txt");
+    expect(parsed?.content).toBe("notes\nbody");
   });
 
-  it("calculates the size in UTF-8 bytes", () => {
-    expect(parseFileMessage("file::привет")?.sizeBytes).toBe(12);
+  it("parses a JSON envelope with base64 file data", () => {
+    const bytes = Uint8Array.from([0, 1, 2, 250, 255]);
+    const text = buildFileMessageEnvelope({
+      id: 42,
+      name: "photo.jpg",
+      size: bytes.byteLength,
+      data: bytes,
+    });
+
+    const parsed = parseFileMessage(text);
+
+    expect(parsed?.legacy).toBe(false);
+    expect(parsed?.transferId).toBe(42);
+    expect(parsed?.fileName).toBe("photo.jpg");
+    expect(parsed?.sizeBytes).toBe(bytes.byteLength);
+    expect(parsed?.content).toBe("");
+    expect(parsed?.data).toEqual(bytes);
+  });
+
+  it("parses an envelope without data (transfer in progress)", () => {
+    const text = buildFileMessageEnvelope({
+      id: 7,
+      name: "report.pdf",
+      size: 1536,
+    });
+
+    const parsed = parseFileMessage(text);
+
+    expect(parsed?.legacy).toBe(false);
+    expect(parsed?.transferId).toBe(7);
+    expect(parsed?.data).toBeUndefined();
+    expect(parsed?.sizeBytes).toBe(1536);
+  });
+
+  it("falls back to the legacy shape for malformed envelopes", () => {
+    const parsed = parseFileMessage('file::{"v":2,"id":1}');
+
+    expect(parsed?.legacy).toBe(true);
+  });
+});
+
+describe("base64 helpers", () => {
+  it("round-trips non-ASCII bytes", () => {
+    const bytes = new TextEncoder().encode("привет");
+    const text = buildFileMessageEnvelope({
+      id: 1,
+      name: "notes.txt",
+      size: bytes.byteLength,
+      data: bytes,
+    });
+    const encoded = JSON.parse(text.slice("file::".length)) as {
+      data: string;
+    };
+
+    expect(decodeBase64(encoded.data)).toEqual(bytes);
   });
 });
 

@@ -17,6 +17,12 @@ export interface RetentionPolicy {
   maxPerBucket?: number;
 }
 
+/** Mutable fields of a persisted message. */
+export interface MessageUpdate {
+  text?: string;
+  state?: MessageState;
+}
+
 /**
  * Port for persisting chat messages. Implementations live in adapter packages
  * (e.g. `@meshtastic/sdk-storage-sqlocal`) or in-memory within the SDK itself.
@@ -31,9 +37,21 @@ export interface MessageRepository {
     cursor: Date,
     limit: number,
   ): Promise<Message[]>;
-  append(message: Message): Promise<void>;
-  appendBatch(messages: ReadonlyArray<Message>): Promise<void>;
+  /**
+   * Appends a message. Pass `key` when the conversation cannot be inferred
+   * from the message alone — optimistically-appended outbound messages have
+   * `from === myNodeNum`, so a direct message's peer is only known to the
+   * caller.
+   */
+  append(message: Message, key?: ConversationKey): Promise<void>;
+  /** Batch variant of `append`; `key` applies to every message in the batch. */
+  appendBatch(
+    messages: ReadonlyArray<Message>,
+    key?: ConversationKey,
+  ): Promise<void>;
   updateState(id: number, state: MessageState): Promise<void>;
+  /** Patches the mutable fields of an already-persisted message. */
+  updateMessage(id: number, patch: MessageUpdate): Promise<void>;
   prune(policy: RetentionPolicy): Promise<void>;
   /** Deletes every message in a single conversation. */
   clearConversation(key: ConversationKey): Promise<void>;

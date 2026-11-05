@@ -60,6 +60,41 @@ describe("SqlocalMessageRepository (sql.js test driver)", () => {
     expect(found?.state).toBe(MessageState.Failed);
   });
 
+  it("stores an outbound direct message under the explicit peer key", async () => {
+    const outbound: Message = {
+      ...msg(7, 1000, "hi peer"),
+      from: 1,
+      to: 99,
+      type: "direct",
+      state: MessageState.Pending,
+    };
+
+    await repo.append(outbound, { kind: "direct", peer: 99 });
+
+    const peerBucket = await repo.loadRecent({ kind: "direct", peer: 99 }, 10);
+    expect(peerBucket.map((m) => m.id)).toEqual([7]);
+
+    // Must not be filed under the sender (myNodeNum) bucket.
+    const senderBucket = await repo.loadRecent({ kind: "direct", peer: 1 }, 10);
+    expect(senderBucket).toHaveLength(0);
+  });
+
+  it("updateMessage patches text and state", async () => {
+    await repo.append(msg(43, 1000, "file::a"));
+
+    await repo.updateMessage(43, {
+      text: "file::b",
+      state: MessageState.Failed,
+    });
+
+    const [found] = await repo.loadRecent(
+      { kind: "channel", channel: ChannelNumber.Primary },
+      1,
+    );
+    expect(found?.text).toBe("file::b");
+    expect(found?.state).toBe(MessageState.Failed);
+  });
+
   it("prune enforces maxPerBucket", async () => {
     await repo.appendBatch([
       msg(1, 1000),

@@ -22,6 +22,12 @@
     "download": "Скачать {{fileName}}",
     "attach": "Прикрепить файлы",
     "remove": "Убрать {{fileName}}",
+    "transfer": {
+      "progress": "Передача… {{percent}}%",
+      "failed": "Не удалось передать файл",
+      "unavailable": "Содержимое файла недоступно",
+      "sendFailed": "Не удалось отправить {{fileName}}"
+    },
     "dialog": {
       "title": "Прикрепить файлы",
       "description": "Файлы будут прикреплены к сообщению.",

@@ -1,5 +1,7 @@
 import type * as Protobuf from "@meshtastic/protobufs";
 import { SimpleEventDispatcher } from "ste-simple-events";
+import type { FileTransferEvent } from "../../features/files/domain/FileTransfer.ts";
+import type { FileTransferFrame } from "../../features/files/protocol/FileTransferCodec.ts";
 import type { DeviceStatusEnum } from "../transport/Transport.ts";
 import type { LogEventPacket, PacketMetadata } from "../types.ts";
 
@@ -31,6 +33,15 @@ export class EventBus {
   public readonly onMessagePacket = new SimpleEventDispatcher<
     PacketMetadata<string>
   >();
+  public readonly onFileTransferPacket = new SimpleEventDispatcher<
+    PacketMetadata<FileTransferFrame>
+  >();
+  public readonly onFileTransferStarted =
+    new SimpleEventDispatcher<FileTransferEvent>();
+  public readonly onFileTransferCompleted =
+    new SimpleEventDispatcher<FileTransferEvent>();
+  public readonly onFileTransferFailed =
+    new SimpleEventDispatcher<FileTransferEvent>();
   public readonly onRemoteHardwarePacket = new SimpleEventDispatcher<
     PacketMetadata<Protobuf.RemoteHardware.HardwareMessage>
   >();

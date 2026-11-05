@@ -251,7 +251,10 @@ export const MessageItem = ({ message }: MessageItemProps) => {
           </div>
 
           {fileMessage ? (
-            <FileMessage {...fileMessage} />
+            <FileMessage
+              {...fileMessage}
+              failed={message.state === MessageState.Failed}
+            />
           ) : (
             message?.message && (
               <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">

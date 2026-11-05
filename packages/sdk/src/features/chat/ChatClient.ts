@@ -8,6 +8,8 @@ import {
   toReadonly,
 } from "../../core/signals/createStore.ts";
 import type { ChannelNumber } from "../../core/types.ts";
+import type { FileTransferEvent } from "../files/domain/FileTransfer.ts";
+import { buildFileMessageEnvelope } from "../files/domain/FileMessageEnvelope.ts";
 import type { DraftRepository } from "./domain/DraftRepository.ts";
 import type { Message } from "./domain/Message.ts";
 import type {
@@ -78,6 +80,15 @@ export class ChatClient {
   private readonly hydrated = new Set<string>();
   private readonly draftsHydrated = new Set<string>();
   private readonly unreadByKey = signal<ReadonlyMap<string, number>>(new Map());
+  /**
+   * Maps a mesh transfer id to the chat message that represents it. File
+   * transfers emit `started` before any bytes move, so the chat row exists
+   * early and is patched on completion/failure.
+   */
+  private readonly fileMessages = new Map<
+    number,
+    { key: string; messageId: number; conv: ConversationKey }
+  >();
 
   public readonly drafts: ChatDrafts;
   public readonly unread: ChatUnread;
@@ -121,13 +132,23 @@ export class ChatClient {
       if (this.store.hasMessage(key, message.id)) return;
 
       this.store.append(key, message);
-      void this.persistAppend(message);
+      void this.persistAppend(message, conv);
 
       // Increment unread count when the message is inbound (not from us). The
       // outbound echo of our own send doesn't count as unread.
       if (packet.from !== client.myNodeNum) {
         this.bumpUnread(key);
       }
+    });
+
+    client.events.onFileTransferStarted.subscribe((event) => {
+      this.handleFileTransferStarted(event);
+    });
+    client.events.onFileTransferCompleted.subscribe((event) => {
+      this.handleFileTransferSettled(event, true);
+    });
+    client.events.onFileTransferFailed.subscribe((event) => {
+      this.handleFileTransferSettled(event, false);
     });
 
     client.events.onRoutingPacket.subscribe((packet) => {
@@ -229,7 +250,7 @@ export class ChatClient {
     };
     if (!this.store.hasMessage(key, packetId)) {
       this.store.append(key, message);
-      void this.persistAppend(message);
+      void this.persistAppend(message, conv);
     }
     this.draftStore.clear(conv);
     void this.draftRepository.clear(conv).catch(() => {});
@@ -288,9 +309,86 @@ export class ChatClient {
     });
   }
 
-  private async persistAppend(message: Message): Promise<void> {
+  private handleFileTransferStarted(event: FileTransferEvent): void {
+    if (this.fileMessages.has(event.id)) return;
+
+    const conv: ConversationKey = { kind: "direct", peer: event.peer };
+    const key = this.keyFor(conv);
+    const outbound = event.direction === "send";
+    const message = this.createFileMessage(event, outbound);
+    this.fileMessages.set(event.id, {
+      key,
+      messageId: message.id,
+      conv,
+    });
+
+    this.store.append(key, message);
+    void this.persistAppend(message, conv);
+    if (!outbound) this.bumpUnread(key);
+  }
+
+  private handleFileTransferSettled(
+    event: FileTransferEvent,
+    succeeded: boolean,
+  ): void {
+    const text = buildFileMessageEnvelope({
+      id: event.id,
+      name: event.filename,
+      size: event.size,
+      data: succeeded ? event.data : undefined,
+    });
+    const state = succeeded ? MessageState.Ack : MessageState.Failed;
+    const tracked = this.fileMessages.get(event.id);
+
+    if (!tracked) {
+      // The `started` event was missed (e.g. transfer resumed after reload),
+      // so materialize the row now with its final payload.
+      const conv: ConversationKey = { kind: "direct", peer: event.peer };
+      const key = this.keyFor(conv);
+      const outbound = event.direction === "send";
+      const message: Message = {
+        ...this.createFileMessage(event, outbound),
+        text,
+        state,
+      };
+      this.store.append(key, message);
+      void this.persistAppend(message, conv);
+      return;
+    }
+
+    this.fileMessages.delete(event.id);
+    this.store.updateMessage(tracked.key, tracked.messageId, { text, state });
+    void this.repository
+      .updateMessage(tracked.messageId, { text, state })
+      .catch(() => {});
+  }
+
+  private createFileMessage(
+    event: FileTransferEvent,
+    outbound: boolean,
+  ): Message {
+    return {
+      id: generatePacketId(),
+      from: outbound ? this.client.myNodeNum : event.peer,
+      to: outbound ? event.peer : this.client.myNodeNum,
+      channel: 0,
+      rxTime: new Date(),
+      type: "direct",
+      text: buildFileMessageEnvelope({
+        id: event.id,
+        name: event.filename,
+        size: event.size,
+      }),
+      state: MessageState.Pending,
+    };
+  }
+
+  private async persistAppend(
+    message: Message,
+    conv: ConversationKey,
+  ): Promise<void> {
     try {
-      await this.repository.append(message);
+      await this.repository.append(message, conv);
       if (this.retention) await this.repository.prune(this.retention);
     } catch {
       // persistence failure must not break reactive flow
