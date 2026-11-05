@@ -1,27 +1,20 @@
-import { FilePickerDialog } from "@components/PageComponents/Messages/FilePickerDialog.tsx";
+import {
+  FilePickerDialog,
+  type SelectedFile,
+} from "@components/PageComponents/Messages/FilePickerDialog.tsx";
 import { Button } from "@components/UI/Button.tsx";
 import { Input } from "@components/UI/Input.tsx";
-import {
-  buildFileMessage,
-  buildMessageWithFile,
-  formatFileSize,
-  truncateToUtf8Bytes,
-} from "@core/utils/fileMessage.ts";
+import { buildFileMessage, formatFileSize } from "@core/utils/fileMessage.ts";
 import type { ConversationKey } from "@meshtastic/sdk";
 import { useDraft } from "@meshtastic/sdk-react";
 import { FileText, PaperclipIcon, SendIcon, X } from "lucide-react";
-import { startTransition, useMemo, useState } from "react";
+import { startTransition, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface MessageInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string) => void | Promise<void>;
   conversation: ConversationKey;
   maxBytes: number;
-}
-
-interface PendingFile {
-  name: string;
-  sizeBytes: number;
 }
 
 function calculateBytes(value: string): number {
@@ -37,113 +30,96 @@ export const MessageInput = ({
   const { t } = useTranslation("messages");
 
   const [localDraft, setLocalDraft] = useState(persistedDraft);
-  const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<SelectedFile[]>([]);
   const [isFileDialogOpen, setIsFileDialogOpen] = useState(false);
 
-  const pendingFileMessage = useMemo(
-    () => (pendingFile ? buildFileMessage(pendingFile.name, maxBytes) : ""),
-    [pendingFile, maxBytes],
-  );
-
-  const messageBytes = useMemo(
-    () =>
-      pendingFile
-        ? calculateBytes(
-            buildMessageWithFile(localDraft, pendingFile.name, maxBytes),
-          )
-        : calculateBytes(localDraft),
-    [localDraft, pendingFile, maxBytes],
-  );
+  const messageBytes = calculateBytes(localDraft);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    const nextMessage = pendingFile
-      ? newValue
-        ? `${newValue}\n${pendingFileMessage}`
-        : pendingFileMessage
-      : newValue;
 
-    if (calculateBytes(nextMessage) <= maxBytes) {
+    if (calculateBytes(newValue) <= maxBytes) {
       setLocalDraft(newValue);
       setText(newValue);
     }
   };
 
-  const handleFileSelected = (fileName: string, sizeBytes: number) => {
-    const fileMessage = buildFileMessage(fileName, maxBytes);
-    const availableTextBytes =
-      maxBytes - calculateBytes(fileMessage) - Number(Boolean(localDraft));
-    const nextDraft =
-      availableTextBytes > 0
-        ? truncateToUtf8Bytes(localDraft, availableTextBytes)
-        : "";
-
-    setPendingFile({ name: fileName, sizeBytes });
-
-    if (nextDraft !== localDraft) {
-      setLocalDraft(nextDraft);
-      setText(nextDraft);
-    }
-  };
-
-  const handleFileRemove = () => {
-    setPendingFile(null);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const message = (
-      pendingFile
-        ? buildMessageWithFile(localDraft, pendingFile.name, maxBytes)
-        : localDraft
-    ).trim();
-
-    if (!message) {
+  const handleFilesSelected = (files: SelectedFile[]) => {
+    if (!files.length) {
       return;
     }
 
-    startTransition(() => {
-      onSend(message);
-      setLocalDraft("");
-      setPendingFile(null);
-      clear();
-    });
+    setPendingFiles((previous) => [...previous, ...files]);
   };
 
-  const removeFileLabel = pendingFile
-    ? t("file.remove", {
-        fileName: pendingFile.name,
-        interpolation: { escapeValue: false },
-      })
-    : "";
+  const handleFileRemove = (index: number) => {
+    setPendingFiles((previous) =>
+      previous.filter((_, fileIndex) => fileIndex !== index),
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = localDraft.trim();
+
+    if (!text && pendingFiles.length === 0) {
+      return;
+    }
+
+    const filesToSend = pendingFiles;
+
+    startTransition(() => {
+      setLocalDraft("");
+      setPendingFiles([]);
+      clear();
+    });
+
+    if (text) {
+      await onSend(text);
+    }
+
+    for (const file of filesToSend) {
+      await onSend(buildFileMessage(file.name, maxBytes));
+    }
+  };
 
   return (
     <div className="flex gap-2">
       <form className="w-full" name="messageInput" onSubmit={handleSubmit}>
-        {pendingFile && (
-          <div className="mb-2 flex items-center gap-2">
-            <div
-              data-testid="pending-file"
-              title={pendingFile.name}
-              className="relative flex size-24 flex-col items-center justify-center gap-0.5 rounded-lg border border-slate-200 bg-white/70 p-2 text-slate-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
-            >
-              <FileText className="size-5 shrink-0" aria-hidden="true" />
-              <span className="w-full truncate text-center text-[11px] leading-tight font-medium text-slate-800 dark:text-slate-100">
-                {pendingFile.name}
-              </span>
-              <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                {formatFileSize(pendingFile.sizeBytes)}
-              </span>
-              <button
-                type="button"
-                onClick={handleFileRemove}
-                aria-label={removeFileLabel}
-                title={removeFileLabel}
-                className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors duration-100 ease-in-out hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
-              >
-                <X className="size-3" aria-hidden="true" />
-              </button>
-            </div>
+        {pendingFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-start gap-2">
+            {pendingFiles.map((file, index) => {
+              const removeFileLabel = t("file.remove", {
+                fileName: file.name,
+                interpolation: { escapeValue: false },
+              });
+
+              return (
+                <div
+                  key={`${file.name}-${index}`}
+                  data-testid="pending-file"
+                  title={file.name}
+                  className="relative flex size-24 flex-col items-center justify-center gap-0.5 rounded-lg border border-slate-200 bg-white/70 p-2 text-slate-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
+                >
+                  <FileText className="size-5 shrink-0" aria-hidden="true" />
+                  <span className="w-full truncate text-center text-[11px] leading-tight font-medium text-slate-800 dark:text-slate-100">
+                    {file.name}
+                  </span>
+                  <span className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                    {formatFileSize(file.sizeBytes)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleFileRemove(index)}
+                    aria-label={removeFileLabel}
+                    title={removeFileLabel}
+                    className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors duration-100 ease-in-out hover:bg-slate-100 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                  >
+                    <X className="size-3" aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -154,7 +130,6 @@ export const MessageInput = ({
             size="icon"
             aria-label={t("file.attach")}
             title={t("file.attach")}
-            disabled={pendingFile !== null}
             onClick={() => setIsFileDialogOpen(true)}
           >
             <PaperclipIcon size={16} />
@@ -188,7 +163,7 @@ export const MessageInput = ({
       <FilePickerDialog
         open={isFileDialogOpen}
         onOpenChange={setIsFileDialogOpen}
-        onFileSelected={handleFileSelected}
+        onFilesSelected={handleFilesSelected}
       />
     </div>
   );

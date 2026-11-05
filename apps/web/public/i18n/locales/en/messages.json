@@ -20,15 +20,15 @@
   },
   "file": {
     "download": "Download {{fileName}}",
-    "attach": "Attach file",
+    "attach": "Attach files",
     "remove": "Remove {{fileName}}",
     "dialog": {
-      "title": "Attach a file",
-      "description": "The file will be attached to the message.",
-      "dropHint": "Drag and drop a file here",
-      "dropActive": "Drop the file to attach it",
-      "chooseHint": "or click this area to choose a file",
-      "choose": "Choose file"
+      "title": "Attach files",
+      "description": "Files will be attached to the message.",
+      "dropHint": "Drag and drop files here",
+      "dropActive": "Drop the files to attach them",
+      "chooseHint": "or click this area to choose files",
+      "choose": "Choose files"
     }
   },
 

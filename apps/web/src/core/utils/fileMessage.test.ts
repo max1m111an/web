@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildFileMessage,
-  buildMessageWithFile,
   formatFileSize,
   parseFileMessage,
   truncateToUtf8Bytes,
@@ -64,42 +63,6 @@ describe("buildFileMessage", () => {
   });
 });
 
-describe("buildMessageWithFile", () => {
-  it("returns only the file message when there is no text", () => {
-    expect(buildMessageWithFile("", "notes.txt", 200)).toBe("file::notes.txt");
-    expect(buildMessageWithFile("   ", "notes.txt", 200)).toBe(
-      "file::notes.txt",
-    );
-  });
-
-  it("puts the text before the file marker", () => {
-    expect(buildMessageWithFile("hello", "notes.txt", 200)).toBe(
-      "hello\nfile::notes.txt",
-    );
-  });
-
-  it("trims the text", () => {
-    expect(buildMessageWithFile("  hello  ", "notes.txt", 200)).toBe(
-      "hello\nfile::notes.txt",
-    );
-  });
-
-  it("truncates the text so the whole message fits the byte limit", () => {
-    const message = buildMessageWithFile("hello world", "notes.txt", 20);
-
-    expect(message).toBe("hell\nfile::notes.txt");
-    expect(new TextEncoder().encode(message).byteLength).toBeLessThanOrEqual(
-      20,
-    );
-  });
-
-  it("drops the text when there is no room left for it", () => {
-    expect(buildMessageWithFile("hello", "notes.txt", 15)).toBe(
-      "file::notes.txt",
-    );
-  });
-});
-
 describe("parseFileMessage", () => {
   it("parses text after the file prefix", () => {
     expect(parseFileMessage("file::hello world!")).toEqual({
@@ -107,21 +70,6 @@ describe("parseFileMessage", () => {
       content: "hello world!",
       sizeBytes: 12,
     });
-  });
-
-  it("parses a caption before the file marker", () => {
-    expect(parseFileMessage("hello\nfile::notes")).toEqual({
-      fileName: "notes.txt",
-      content: "notes",
-      sizeBytes: 5,
-      caption: "hello",
-    });
-  });
-
-  it("keeps multi-line captions", () => {
-    expect(parseFileMessage("hello\nthere\nfile::notes")?.caption).toBe(
-      "hello\nthere",
-    );
   });
 
   it("returns null for messages without the file prefix", () => {

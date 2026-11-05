@@ -40,22 +40,45 @@ vi.mock("@components/PageComponents/Messages/FilePickerDialog.tsx", () => ({
   FilePickerDialog: ({
     open,
     onOpenChange,
-    onFileSelected,
+    onFilesSelected,
   }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onFileSelected: (fileName: string, sizeBytes: number) => void;
+    onFilesSelected: (files: { name: string; sizeBytes: number }[]) => void;
   }) =>
     open ? (
-      <button
-        type="button"
-        onClick={() => {
-          onFileSelected("report.pdf", 1536);
-          onOpenChange(false);
-        }}
-      >
-        select-file
-      </button>
+      <div>
+        <button
+          type="button"
+          onClick={() => {
+            onFilesSelected([{ name: "report.pdf", sizeBytes: 1536 }]);
+            onOpenChange(false);
+          }}
+        >
+          select-file
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onFilesSelected([{ name: "notes.txt", sizeBytes: 20 }]);
+            onOpenChange(false);
+          }}
+        >
+          select-another-file
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onFilesSelected([
+              { name: "report.pdf", sizeBytes: 1536 },
+              { name: "notes.txt", sizeBytes: 20 },
+            ]);
+            onOpenChange(false);
+          }}
+        >
+          select-multiple-files
+        </button>
+      </div>
     ) : null,
 }));
 
@@ -108,46 +131,65 @@ describe("MessageInput", () => {
     expect(screen.getByTestId("send-icon")).toBeInTheDocument();
   });
 
-  it("shows a selected file as a square preview above the input", () => {
+  it("shows selected files as square previews above the input", () => {
     renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
-
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /select-another-file/i }),
+    );
 
     const input = screen.getByTestId("message-input-field") as HTMLInputElement;
-    const fileMessage = "file::report.pdf";
 
     expect(input.value).toBe("");
     expect(mockSetText).not.toHaveBeenCalled();
 
-    const pendingFile = screen.getByTestId("pending-file");
+    const pendingFiles = screen.getAllByTestId("pending-file");
 
-    expect(pendingFile).toHaveAttribute("title", "report.pdf");
-    expect(pendingFile).toHaveTextContent("report.pdf");
-    expect(pendingFile).toHaveTextContent("1.5 KB");
-    expect(screen.getByTestId("file-text-icon")).toBeInTheDocument();
+    expect(pendingFiles).toHaveLength(2);
+    expect(pendingFiles[0]).toHaveAttribute("title", "report.pdf");
+    expect(pendingFiles[0]).toHaveTextContent("report.pdf");
+    expect(pendingFiles[0]).toHaveTextContent("1.5 KB");
+    expect(pendingFiles[1]).toHaveAttribute("title", "notes.txt");
+    expect(pendingFiles[1]).toHaveTextContent("notes.txt");
+    expect(pendingFiles[1]).toHaveTextContent("20 B");
+    expect(screen.getAllByTestId("file-text-icon")).toHaveLength(2);
     expect(
-      screen.getByRole("button", { name: /remove report\.pdf/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /attach file/i })).toBeDisabled();
+      screen.getByRole("button", { name: /attach file/i }),
+    ).not.toBeDisabled();
     expect(screen.getByTestId("byte-counter")).toHaveTextContent(
-      `${new Blob([fileMessage]).size}/${defaultProps.maxBytes}`,
+      `0/${defaultProps.maxBytes}`,
     );
   });
 
-  it("should truncate the file message to maxBytes", () => {
+  it("adds multiple selected files to the pool at once", () => {
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /select-multiple-files/i }),
+    );
+
+    const pendingFiles = screen.getAllByTestId("pending-file");
+
+    expect(pendingFiles).toHaveLength(2);
+    expect(pendingFiles[0]).toHaveAttribute("title", "report.pdf");
+    expect(pendingFiles[1]).toHaveAttribute("title", "notes.txt");
+  });
+
+  it("truncates the file message name to maxBytes", async () => {
     renderComponent({ maxBytes: 10 });
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
 
-    expect(
-      (screen.getByTestId("message-input-field") as HTMLInputElement).value,
-    ).toBe("");
-    expect(mockSetText).not.toHaveBeenCalled();
-    expect(screen.getByTestId("byte-counter")).toHaveTextContent("10/10");
+    fireEvent.submit(screen.getByRole("form"));
+
+    await waitFor(() => {
+      expect(mockOnSend).toHaveBeenCalledWith("file::repo");
+    });
   });
 
-  it("sends the text before the attached file", async () => {
+  it("sends the text and each file as separate messages in order", async () => {
     renderComponent();
     const input = screen.getByTestId("message-input-field") as HTMLInputElement;
     const formElement = screen.getByRole("form");
@@ -155,51 +197,66 @@ describe("MessageInput", () => {
     fireEvent.change(input, { target: { value: "hello" } });
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
-
-    const expectedMessage = "hello\nfile::report.pdf";
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /select-another-file/i }),
+    );
 
     expect(input.value).toBe("hello");
     expect(screen.getByTestId("byte-counter")).toHaveTextContent(
-      `${new Blob([expectedMessage]).size}/${defaultProps.maxBytes}`,
+      `${new Blob(["hello"]).size}/${defaultProps.maxBytes}`,
     );
 
     fireEvent.submit(formElement);
 
     await waitFor(() => {
-      expect(mockOnSend).toHaveBeenCalledWith(expectedMessage);
+      expect(mockOnSend.mock.calls).toEqual([
+        ["hello"],
+        ["file::report.pdf"],
+        ["file::notes.txt"],
+      ]);
       expect(mockClear).toHaveBeenCalled();
       expect(input.value).toBe("");
-      expect(screen.queryByTestId("pending-file")).not.toBeInTheDocument();
+      expect(screen.queryAllByTestId("pending-file")).toHaveLength(0);
     });
   });
 
-  it("sends the file when the input is empty", async () => {
+  it("sends only the files when the input is empty", async () => {
     renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /select-another-file/i }),
+    );
 
     fireEvent.submit(screen.getByRole("form"));
 
     await waitFor(() => {
-      expect(mockOnSend).toHaveBeenCalledWith("file::report.pdf");
+      expect(mockOnSend.mock.calls).toEqual([
+        ["file::report.pdf"],
+        ["file::notes.txt"],
+      ]);
       expect(mockClear).toHaveBeenCalled();
-      expect(screen.queryByTestId("pending-file")).not.toBeInTheDocument();
+      expect(screen.queryAllByTestId("pending-file")).toHaveLength(0);
     });
   });
 
-  it("removes the pending file", () => {
+  it("removes a pending file from the pool", () => {
     renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
     fireEvent.click(screen.getByRole("button", { name: /select-file/i }));
-
+    fireEvent.click(screen.getByRole("button", { name: /attach file/i }));
     fireEvent.click(
-      screen.getByRole("button", { name: /remove report\.pdf/i }),
+      screen.getByRole("button", { name: /select-another-file/i }),
     );
 
-    expect(screen.queryByTestId("pending-file")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /attach file/i }),
-    ).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /remove notes\.txt/i }));
+
+    const pendingFiles = screen.getAllByTestId("pending-file");
+
+    expect(pendingFiles).toHaveLength(1);
+    expect(pendingFiles[0]).toHaveAttribute("title", "report.pdf");
   });
 
   it("should initialize with the persisted draft text from the SDK", () => {

@@ -251,18 +251,7 @@ export const MessageItem = ({ message }: MessageItemProps) => {
           </div>
 
           {fileMessage ? (
-            <div className="flex flex-col gap-1">
-              {fileMessage.caption && (
-                <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">
-                  {fileMessage.caption}
-                </div>
-              )}
-              <FileMessage
-                fileName={fileMessage.fileName}
-                content={fileMessage.content}
-                sizeBytes={fileMessage.sizeBytes}
-              />
-            </div>
+            <FileMessage {...fileMessage} />
           ) : (
             message?.message && (
               <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">

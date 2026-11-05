@@ -33,14 +33,14 @@ vi.mock("@components/UI/Dialog.tsx", () => ({
 
 describe("FilePickerDialog", () => {
   const onOpenChange = vi.fn();
-  const onFileSelected = vi.fn();
+  const onFilesSelected = vi.fn();
 
   const renderComponent = () =>
     render(
       <FilePickerDialog
         open
         onOpenChange={onOpenChange}
-        onFileSelected={onFileSelected}
+        onFilesSelected={onFilesSelected}
       />,
     );
 
@@ -52,7 +52,7 @@ describe("FilePickerDialog", () => {
     renderComponent();
 
     expect(
-      screen.getByRole("heading", { name: /attach a file/i }),
+      screen.getByRole("heading", { name: /attach files/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("file-drop-zone")).toBeInTheDocument();
     expect(screen.getByTestId("file-input")).toBeInTheDocument();
@@ -66,23 +66,35 @@ describe("FilePickerDialog", () => {
       dataTransfer: { files: [file] },
     });
 
-    expect(onFileSelected).toHaveBeenCalledWith("report.pdf", file.size);
+    expect(onFilesSelected).toHaveBeenCalledWith([
+      { name: "report.pdf", sizeBytes: file.size },
+    ]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("selects a file picked from the file input", () => {
+  it("selects multiple files picked from the file input in order", () => {
     renderComponent();
-    const file = new File(["content"], "notes.txt");
+    const firstFile = new File(["content"], "notes.txt");
+    const secondFile = new File(["more content"], "report.pdf");
     const input = screen.getByTestId("file-input") as HTMLInputElement;
 
     Object.defineProperty(input, "files", {
-      value: [file],
+      value: [firstFile, secondFile],
       configurable: true,
     });
     fireEvent.change(input);
 
-    expect(onFileSelected).toHaveBeenCalledWith("notes.txt", file.size);
+    expect(onFilesSelected).toHaveBeenCalledWith([
+      { name: "notes.txt", sizeBytes: firstFile.size },
+      { name: "report.pdf", sizeBytes: secondFile.size },
+    ]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("allows selecting multiple files", () => {
+    renderComponent();
+
+    expect(screen.getByTestId("file-input")).toHaveAttribute("multiple");
   });
 
   it("opens the file input when the choose button is clicked", () => {
@@ -90,7 +102,7 @@ describe("FilePickerDialog", () => {
     const input = screen.getByTestId("file-input") as HTMLInputElement;
     const clickSpy = vi.spyOn(input, "click");
 
-    fireEvent.click(screen.getByRole("button", { name: /^choose file$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^choose files$/i }));
 
     expect(clickSpy).toHaveBeenCalledTimes(1);
   });

@@ -14,27 +14,37 @@ import type { ChangeEvent, DragEvent } from "react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+export interface SelectedFile {
+  name: string;
+  sizeBytes: number;
+}
+
 export interface FilePickerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFileSelected: (fileName: string, sizeBytes: number) => void;
+  onFilesSelected: (files: SelectedFile[]) => void;
 }
 
 export const FilePickerDialog = ({
   open,
   onOpenChange,
-  onFileSelected,
+  onFilesSelected,
 }: FilePickerDialogProps) => {
   const { t } = useTranslation("messages");
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const selectFile = (file: File | undefined) => {
-    if (!file) {
+  const selectFiles = (files: FileList | null | undefined) => {
+    if (!files?.length) {
       return;
     }
 
-    onFileSelected(file.name, file.size);
+    onFilesSelected(
+      Array.from(files).map((file) => ({
+        name: file.name,
+        sizeBytes: file.size,
+      })),
+    );
     onOpenChange(false);
   };
 
@@ -43,7 +53,7 @@ export const FilePickerDialog = ({
   };
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    selectFile(event.target.files?.[0]);
+    selectFiles(event.target.files);
     // Allow selecting the same file again.
     event.target.value = "";
   };
@@ -66,7 +76,7 @@ export const FilePickerDialog = ({
     event.preventDefault();
     event.stopPropagation();
     setIsDragging(false);
-    selectFile(event.dataTransfer.files?.[0]);
+    selectFiles(event.dataTransfer.files);
   };
 
   return (
@@ -112,6 +122,7 @@ export const FilePickerDialog = ({
         <input
           ref={inputRef}
           type="file"
+          multiple
           className="hidden"
           data-testid="file-input"
           onChange={handleInputChange}
