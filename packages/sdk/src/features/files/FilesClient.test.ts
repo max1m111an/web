@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import * as Protobuf from "@meshtastic/protobufs";
 import { describe, expect, it, vi } from "vitest";
 import { MeshClient } from "../../core/client/MeshClient.ts";
 import { Constants } from "../../core/constants/index.ts";
@@ -88,6 +90,9 @@ describe("FilesClient.sendFile stop-and-wait", () => {
     const pending = client.files.sendFile(PEER, "test.bin", data);
 
     expect(sendSpy).toHaveBeenCalledTimes(1);
+    // Mesh-level ACKs are not requested: READY/ACK/COMPLETE are the file
+    // protocol's own acknowledgement layer.
+    expect(sendSpy.mock.calls[0]![4]).toBe(false);
     const startFrame = decodeFileTransferFrame(
       sendSpy.mock.calls[0]![0] as Uint8Array,
     );
@@ -230,6 +235,58 @@ describe("FilesClient.sendFile stop-and-wait", () => {
     if (result.status === "error") {
       expect(result.error.code).toBe("send_failed");
       expect(result.error.message).toBe("disk full");
+    }
+  });
+
+  it("handles a self-addressed transfer using local control frames", async () => {
+    const self = 2708;
+    const client = makeClient();
+    client.events.onMyNodeInfo.dispatch(
+      create(Protobuf.Mesh.MyNodeInfoSchema, { myNodeNum: self }),
+    );
+    const sendSpy = vi.spyOn(client, "sendPacket").mockResolvedValue(1);
+    const data = Uint8Array.from([9, 8, 7]);
+
+    const pending = client.files.sendFile(self, "self.bin", data);
+    const startFrame = decodeFileTransferFrame(
+      sendSpy.mock.calls[0]![0] as Uint8Array,
+    );
+    expect(startFrame.type).toBe(FileTransferType.START);
+    expect(sendSpy.mock.calls[0]![2]).toBe(self);
+
+    // The firmware handles the self-addressed START/CHUNK and loops the
+    // control frames back locally.
+    dispatchFrame(
+      client,
+      self,
+      createFileTransferFrame({
+        type: FileTransferType.READY,
+        transferId: startFrame.transferId,
+      }),
+    );
+
+    expect(sendSpy).toHaveBeenCalledTimes(2);
+    const chunk = decodeFileTransferFrame(
+      sendSpy.mock.calls[1]![0] as Uint8Array,
+    );
+    expect(chunk.type).toBe(FileTransferType.CHUNK);
+    expect(chunk.data).toEqual(data);
+
+    dispatchFrame(
+      client,
+      self,
+      createFileTransferFrame({
+        type: FileTransferType.COMPLETE,
+        transferId: startFrame.transferId,
+        status: FileTransferStatus.OK,
+      }),
+    );
+
+    const result = await pending;
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.value.status).toBe("complete");
+      expect(result.value.peer).toBe(self);
     }
   });
 });

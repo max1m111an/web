@@ -269,7 +269,14 @@ export class FilesClient {
   }
 
   private handleFrame(packet: PacketMetadata<FileTransferFrame>): void {
-    if (packet.from === this.client.myNodeNum) return;
+    // Ignore our own outgoing packets, but allow locally delivered self-DM
+    // frames (from == to == myNodeNum).
+    if (
+      packet.from === this.client.myNodeNum &&
+      packet.to !== this.client.myNodeNum
+    ) {
+      return;
+    }
 
     const frame = packet.data;
     if (!frame) return;
@@ -281,13 +288,26 @@ export class FilesClient {
       frame.type === FileTransferType.FAILURE ||
       frame.type === FileTransferType.ABORT;
 
+    const outbound = this.outbound;
+
     if (
       isControl &&
-      this.outbound &&
-      packet.from === this.outbound.peer &&
-      frame.transferId === this.outbound.transferId
+      outbound &&
+      (packet.from === outbound.peer ||
+        (packet.from === 0 && outbound.peer === this.client.myNodeNum)) &&
+      frame.transferId === outbound.transferId
     ) {
-      this.handleOutboundControl(this.outbound, frame);
+      this.handleOutboundControl(outbound, frame);
+      return;
+    }
+
+    // A self-addressed transfer is driven by the firmware; do not treat the
+    // client's own START/CHUNK copies as a second inbound transfer.
+    if (
+      (frame.type === FileTransferType.START ||
+        frame.type === FileTransferType.CHUNK) &&
+      (packet.from === this.client.myNodeNum || packet.from === 0)
+    ) {
       return;
     }
 
@@ -527,7 +547,11 @@ export class FilesClient {
         FILE_TRANSFER_PORT,
         outbound.peer,
         0,
-        true,
+        // The file-transfer protocol has its own READY/ACK/COMPLETE
+        // acknowledgement layer. Requesting a mesh-level ACK as well makes the
+        // router retransmit every chunk even though the application already
+        // handles retries.
+        false,
         false,
         false,
       )
