@@ -166,6 +166,32 @@ export const MessagesPage = () => {
     [meshClient, numericChatId, isDirect],
   );
 
+  const sendFiles = useCallback(
+    async (files: File[]) => {
+      if (!meshClient || !isDirect) {
+        return;
+      }
+      for (const file of files) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const result = await meshClient.files.sendFile(
+          numericChatId,
+          file.name,
+          bytes,
+        );
+        if (result.status === "error") {
+          console.error("Failed to send file:", result.error);
+          toast({
+            title: t("file.transfer.sendFailed", {
+              fileName: file.name,
+              interpolation: { escapeValue: false },
+            }),
+          });
+        }
+      }
+    },
+    [meshClient, isDirect, numericChatId, t, toast],
+  );
+
   const broadcastMessages = useChatAsLegacyMessages({
     type: MessageType.Broadcast,
     channelId: numericChatId,
@@ -330,6 +356,7 @@ export const MessagesPage = () => {
                   : { kind: "channel", channel: numericChatId }
               }
               onSend={sendText}
+              onSendFiles={isDirect ? sendFiles : undefined}
               maxBytes={200}
             />
           ) : (

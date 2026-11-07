@@ -18,6 +18,25 @@
     "addReactionLabel": "Add Reaction",
     "replyLabel": "Reply"
   },
+  "file": {
+    "download": "Download {{fileName}}",
+    "attach": "Attach files",
+    "remove": "Remove {{fileName}}",
+    "transfer": {
+      "progress": "Transferring… {{percent}}%",
+      "failed": "Transfer failed",
+      "unavailable": "File content unavailable",
+      "sendFailed": "Could not send {{fileName}}"
+    },
+    "dialog": {
+      "title": "Attach files",
+      "description": "Files will be attached to the message.",
+      "dropHint": "Drag and drop files here",
+      "dropActive": "Drop the files to attach them",
+      "chooseHint": "or click this area to choose files",
+      "choose": "Choose files"
+    }
+  },
 
   "deliveryStatus": {
     "delivered": {

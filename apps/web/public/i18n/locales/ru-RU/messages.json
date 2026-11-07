@@ -18,6 +18,25 @@
     "addReactionLabel": "Добавить реакцию",
     "replyLabel": "Ответить"
   },
+  "file": {
+    "download": "Скачать {{fileName}}",
+    "attach": "Прикрепить файлы",
+    "remove": "Убрать {{fileName}}",
+    "transfer": {
+      "progress": "Передача… {{percent}}%",
+      "failed": "Не удалось передать файл",
+      "unavailable": "Содержимое файла недоступно",
+      "sendFailed": "Не удалось отправить {{fileName}}"
+    },
+    "dialog": {
+      "title": "Прикрепить файлы",
+      "description": "Файлы будут прикреплены к сообщению.",
+      "dropHint": "Перетащите файлы сюда",
+      "dropActive": "Отпустите файлы, чтобы прикрепить",
+      "chooseHint": "или нажмите на эту область, чтобы выбрать файлы",
+      "choose": "Выбрать файлы"
+    }
+  },
   "deliveryStatus": {
     "delivered": {
       "label": "Сообщение доставлено",

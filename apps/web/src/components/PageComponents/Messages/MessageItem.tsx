@@ -1,3 +1,4 @@
+import { FileMessage } from "@components/PageComponents/Messages/FileMessage.tsx";
 import { Avatar } from "@components/UI/Avatar.tsx";
 import {
   Tooltip,
@@ -13,6 +14,7 @@ import {
 import { useAppStore, useDevice } from "@core/stores";
 import { type Message, MessageState } from "@core/stores/messageStore";
 import { cn } from "@core/utils/cn.ts";
+import { parseFileMessage } from "@core/utils/fileMessage.ts";
 import { type Protobuf, Types } from "@meshtastic/sdk";
 import type { LucideIcon } from "lucide-react";
 import { AlertCircle, CheckCircle2, CircleEllipsis } from "lucide-react";
@@ -167,6 +169,11 @@ export const MessageItem = ({ message }: MessageItemProps) => {
   const messageStatusInfo = getMessageStatusInfo(message.state);
   const StatusIconComponent = messageStatusInfo.icon;
 
+  const fileMessage = useMemo(
+    () => parseFileMessage(message.message),
+    [message.message],
+  );
+
   const messageDate = useMemo(
     () => (message.date ? new Date(message.date) : null),
     [message.date],
@@ -243,10 +250,17 @@ export const MessageItem = ({ message }: MessageItemProps) => {
             )}
           </div>
 
-          {message?.message && (
-            <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">
-              {message.message}
-            </div>
+          {fileMessage ? (
+            <FileMessage
+              {...fileMessage}
+              failed={message.state === MessageState.Failed}
+            />
+          ) : (
+            message?.message && (
+              <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">
+                {message.message}
+              </div>
+            )
           )}
         </div>
       </div>
